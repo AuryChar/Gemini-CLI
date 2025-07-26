@@ -16,6 +16,23 @@ cd Gemini-CLI
 
 ```
 
+## Set environment variable
+
+Create a file named `.env` in the root directory of the project and add the following line:
+```bash
+touch .env
+```
+
+Enter in `.env` file with `nano`(or any other text editor):
+```bash
+nano .env
+```
+
+Inside the file, add the following line:
+```bash
+GOOGLE_API_KEY='YOUR_GOOGLE_API_KEY'
+```
+
 ## Build the project
 
 ```bash

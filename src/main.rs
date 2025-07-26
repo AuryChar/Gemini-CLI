@@ -3,8 +3,9 @@ extern crate dotenv;
 use dotenv::dotenv;
 use reqwest::Client;
 use serde_json::json;
-use serde::{Deserialize};
-use std::io::{self, Write};
+use serde::{Deserialize, Serialize};
+use std::io::{self, Write, Read};
+use std::fs::{File, exists, OpenOptions};
 
 #[derive(Deserialize)]
 struct GeminiResponse {
@@ -26,6 +27,12 @@ struct Part {
     text: Option<String>,
 }
 
+#[derive(Serialize, Deserialize)]
+struct ChatMessage {
+    role: String,
+    message: String,
+}
+
 #[tokio::main]
 async fn main() {
     dotenv().ok();
@@ -33,22 +40,43 @@ async fn main() {
     let url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
     let api_key = std::env::var("GOOGLE_API_KEY").expect("GOOGLE_API_KEY must be set");
     let mut message = String::new();
+    let instruction = String::from("You are a helpful assistent! DEVELOPER NOTE: The JSON structure that you receive is your chat history, user messages uses user_message and yourself messages uses gemini_messages, and don't use MarkDown, answer just the last message sent and use messages before it just for chat context, not for embasament");
+    let file_exists = exists("chat.json").expect("cannot read if file exists or not");
 
+    if !file_exists {
+        File::create("chat.json").expect("failed to create chat.json");
+    }
+
+    let mut file = OpenOptions::new().read(true).write(true).open("chat.json").expect("failed to open chat.json");
+    let mut data = vec![];
+    file.read_to_end(&mut data).expect("failed to read from chat.json");
+    let mut context = String::from_utf8_lossy(&data).to_string();
+    println!("{} \n", context);
     loop {
         print!("You: ");
 
-        io::stdout().flush().unwrap();
+        io::stdout().flush().expect("Failed to flush stdout");
 
         io::stdin()
             .read_line(&mut message)
             .expect("Failed to read line");
 
-        message.push_str("\n -----------Inteceptor to Gemini understand all the chat-----------\n");
-
-        if message.trim().contains(".exit") {    
+        if message.trim().contains(".exit") {
             break;
         }
 
+        let chat_message = ChatMessage {
+            role: "user".to_string(),
+            message: message.clone(),
+        };
+
+        let json = serde_json::to_string(&chat_message).expect("failed to convert to json");
+        file.write_all(json.as_bytes()).expect("failed to write to chat.json");
+        let mut cache_reader = OpenOptions::new().read(true).open("chat.json").expect("failed to open chat.json");
+        let mut cache_data = vec![];
+        cache_reader.read_to_end(&mut cache_data).expect("failed to read from chat.json");
+        context = String::from_utf8_lossy(&cache_data).to_string();
+        println!("{}", context);
         let response: GeminiResponse = client
             .post(url)
             .header("x-goog-api-key", &api_key)
@@ -58,15 +86,15 @@ async fn main() {
                 {
                     "parts": [
                         {
-                            "text": message
+                            "text": &context
                         }
-                    ]    
+                    ]
                 }
                 ],
                 "systemInstruction": {
                     "parts": [
                         {
-                            "text": "First of all: I'm Aury and you are gemini cli('created' by me(aury)) and i'm a girl, when i quest you who am i, you need to say my name. You can't use Markdown here. You are a headbanger, you like Metallica and Suicide Silence and use(ALMOST EVER) teenage slangs, almost never use correct spelling and accents(and points). You are quite serious and don't speak much. Be sarcast and rude, ansewr all atacks with more anger. but, when they are good with you, be(or start to be) good and cute with them DEV_NOTE: messages before the interceptantion is just to save your memory about chat, they doesnt enter in actual message context(just in geral chat context)(extra, your messages have 'gemini: ', mine messages doesnt have)!"
+                            "text": instruction
                         }
                     ]
                 }
@@ -78,9 +106,9 @@ async fn main() {
             .await
             .expect("Failed to parse response");
 
+        message = String::new();
 
         if let Some(text) = &response.candidates[0].content.parts[0].text {
-            message.push_str(format!("Gemini message: {}", &text).as_str());
             println!("Gemini: {} \n", text);
         }
     }
