@@ -2,7 +2,7 @@
 
 This is an experimental gemini client written in rust.
 
-to use it, install follow the steps below.
+to use it, follow the steps below.
 
 ## Clone the repository
 ```bash
