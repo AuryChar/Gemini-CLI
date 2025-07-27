@@ -5,6 +5,7 @@ use reqwest::Client;
 use serde_json::json;
 use serde::{Deserialize, Serialize};
 use std::io::{self, Write, Read};
+use std::fs;
 use std::fs::{File, exists, OpenOptions};
 
 #[derive(Deserialize)]
@@ -14,11 +15,11 @@ struct GeminiResponse {
 
 #[derive(Deserialize)]
 struct Candidate {
-    content: COntent,
+    content: Content,
 }
 
 #[derive(Deserialize)]
-struct COntent {
+struct Content {
     parts: Vec<Part>,
 }
 
@@ -51,7 +52,7 @@ async fn main() {
     let mut data = vec![];
     file.read_to_end(&mut data).expect("failed to read from chat.json");
     let mut context = String::from_utf8_lossy(&data).to_string();
-    println!("{} \n", context);
+    // println!("{} \n", context);
     loop {
         print!("You: ");
 
@@ -62,21 +63,22 @@ async fn main() {
             .expect("Failed to read line");
 
         if message.trim().contains(".exit") {
+            fs::remove_file("chat.json").expect("failed to remove chat.json");
             break;
         }
 
-        let chat_message = ChatMessage {
+        let user_message = ChatMessage {
             role: "user".to_string(),
             message: message.clone(),
         };
 
-        let json = serde_json::to_string(&chat_message).expect("failed to convert to json");
-        file.write_all(json.as_bytes()).expect("failed to write to chat.json");
+        let user_json = serde_json::to_string(&user_message).expect("failed to convert to json");
+        file.write_all(user_json.as_bytes()).expect("failed to write to chat.json");
         let mut cache_reader = OpenOptions::new().read(true).open("chat.json").expect("failed to open chat.json");
         let mut cache_data = vec![];
         cache_reader.read_to_end(&mut cache_data).expect("failed to read from chat.json");
         context = String::from_utf8_lossy(&cache_data).to_string();
-        println!("{}", context);
+        // println!("{}", context);
         let response: GeminiResponse = client
             .post(url)
             .header("x-goog-api-key", &api_key)
@@ -109,6 +111,13 @@ async fn main() {
         message = String::new();
 
         if let Some(text) = &response.candidates[0].content.parts[0].text {
+            let gemini_message = ChatMessage {
+                role: "gemini".to_string(),
+                message: text.clone(),
+            };
+
+            let gemini_json = serde_json::to_string(&gemini_message).expect("failed to convert to json");
+            file.write_all(gemini_json.as_bytes()).expect("failed to write to chat.json");
             println!("Gemini: {} \n", text);
         }
     }
